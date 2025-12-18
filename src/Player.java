@@ -1,11 +1,14 @@
 import java.awt.Color;
 
+// Implements Comparable agar bisa diurutkan di Leaderboard (PriorityQueue)
 public class Player implements Comparable<Player> {
     private String name;
     private int position;
     private Color color;
-    private int currentSessionScore; // Score game saat ini (bisa reset)
-    private PlayerRecord record;     // Data abadi (Wins & Total Score)
+
+    // Tambahan untuk fitur Score & Record
+    private int currentSessionScore;
+    private PlayerRecord record;
 
     public Player(String name, Color color, PlayerRecord record) {
         this.name = name;
@@ -15,48 +18,38 @@ public class Player implements Comparable<Player> {
         this.currentSessionScore = 0;
     }
 
+    // Method untuk menambah skor (dipanggil saat kena bintang)
     public void addScore(int points) {
         this.currentSessionScore += points;
-        this.record.addScore(points); // Tambah ke total akumulasi database
+        this.record.addScore(points); // Simpan ke riwayat abadi juga
     }
 
+    // Method untuk menang
     public void addWin() {
         this.record.addWin();
     }
 
-    // Method untuk reset score sesi ini saja (visual game), tapi Total Record aman
-    public void setCurrentScore(int score) {
-        this.currentSessionScore = score;
-    }
-
+    // --- GETTERS & SETTERS ---
     public String getName() { return name; }
     public int getPosition() { return position; }
     public void setPosition(int position) { this.position = position; }
     public Color getColor() { return color; }
 
-    // --- UPDATE: Mengambil Score Akumulasi (Semua Game) ---
-    public int getTotalAccumulatedScore() {
-        return record.getTotalScore();
-    }
+    // Method yang tadi Error (Sekarang sudah ada)
+    public int getCurrentScore() { return currentSessionScore; }
 
-    public int getCurrentSessionScore() {
-        return currentSessionScore;
-    }
-
+    // Ambil total kemenangan dari record
     public int getTotalWins() { return record.getTotalWins(); }
 
-    // --- UPDATE LOGIKA RANKING (PENTING) ---
+    // Logika Ranking untuk Leaderboard:
+    // 1. Posisi tertinggi (paling dekat finish)
+    // 2. Jika posisi sama, lihat Score tertinggi
     @Override
     public int compareTo(Player other) {
-        // 1. PRIORITAS UTAMA: Siapa yang paling sering menang (Total Wins)
-        int winCompare = Integer.compare(other.getTotalWins(), this.getTotalWins());
-        if (winCompare != 0) return winCompare;
-
-        // 2. PRIORITAS KEDUA: Siapa yang punya Total Score Akumulasi terbanyak
-        int scoreCompare = Integer.compare(other.getTotalAccumulatedScore(), this.getTotalAccumulatedScore());
-        if (scoreCompare != 0) return scoreCompare;
-
-        // 3. PRIORITAS KETIGA: Siapa yang posisinya paling depan di game saat ini
-        return Integer.compare(other.position, this.position);
+        if (this.position != other.position) {
+            return Integer.compare(other.position, this.position); // Descending Position
+        } else {
+            return Integer.compare(other.currentSessionScore, this.currentSessionScore); // Descending Score
+        }
     }
 }

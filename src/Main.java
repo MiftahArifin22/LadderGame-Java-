@@ -9,33 +9,41 @@ import java.util.List;
 import javax.swing.Timer;
 
 public class Main extends JFrame {
-    // Pastikan nama file ini SAMA PERSIS dengan file yang ada di folder project kamu
-    private static final String SOUND_PATH = "Ular Tangga - Modern Stage - Mohamad Rifandi Lihawa - SoundLoadMate.com.wav";
 
-    // --- DATA STORE (DATABASE SEMENTARA) ---
-    // Map ini menjaga data kemenangan tetap ada meskipun game di-reset
+    // --- CONFIG AUDIO ---
+    // BGM: Musik Gamenya
+    private static final String BGM_PATH = "Ular Tangga - Modern Stage - Mohamad Rifandi Lihawa - SoundLoadMate.com.wav";
+
+    // SFX: Efek Suara LANGKAH
+    private static final String STEP_SFX_PATH = "Jalan.wav";
+
+    // --- DATA STORE ---
     private static Map<String, PlayerRecord> globalRecords = new HashMap<>();
 
     private GameBoard gameBoard;
     private JButton playButton;
     private JButton rollDiceButton;
-    private JLabel diceResultLabel;
+
+    // Visual Components
+    private DicePanel diceVisualPanel;
     private JLabel diceStatusLabel;
     private JPanel scoreboardPanel;
     private JLabel currentPlayerLabel;
 
+    // Game Logic Data
     private List<Player> players;
     private Queue<Player> playerQueue;
     private PriorityQueue<Player> leaderboardQueue;
     private Player currentPlayer;
-
     private boolean gameStarted = false;
     private Random random;
     private boolean isAnimating = false;
     private List<Ladder> ladders;
     private Set<Integer> scoreNodes;
 
-    private Clip audioClip;
+    // Audio Clips
+    private Clip backgroundMusic;
+    // Kita tidak simpan Clip step secara global agar bisa diputar tumpang tindih dengan cepat
 
     // Warna UI
     private final Color COLOR_BG_DARK = new Color(30, 40, 50);
@@ -54,24 +62,42 @@ public class Main extends JFrame {
         leaderboardQueue = new PriorityQueue<>();
 
         initializeUI();
+
+        // Mulai Musik Background
+        playBackgroundMusic();
     }
 
-    private void playMusic(String filePath) {
+    // --- AUDIO METHODS ---
+
+    private void playBackgroundMusic() {
         try {
-            File musicPath = new File(filePath);
-            if (musicPath.exists()) {
-                AudioInputStream audioInput = AudioSystem.getAudioInputStream(musicPath);
-                audioClip = AudioSystem.getClip();
-                audioClip.open(audioInput);
-                FloatControl gainControl = (FloatControl) audioClip.getControl(FloatControl.Type.MASTER_GAIN);
-                gainControl.setValue(-10.0f);
-                audioClip.start();
-                audioClip.loop(Clip.LOOP_CONTINUOUSLY);
-            } else {
-                System.err.println("File Audio tidak ditemukan di root folder project.");
+            File soundFile = new File(BGM_PATH);
+            if (soundFile.exists()) {
+                AudioInputStream audioIn = AudioSystem.getAudioInputStream(soundFile);
+                backgroundMusic = AudioSystem.getClip();
+                backgroundMusic.open(audioIn);
+                FloatControl gainControl = (FloatControl) backgroundMusic.getControl(FloatControl.Type.MASTER_GAIN);
+                gainControl.setValue(-10.0f); // Volume BGM dikecilkan
+                backgroundMusic.loop(Clip.LOOP_CONTINUOUSLY);
+                backgroundMusic.start();
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("Error playing BGM: " + e.getMessage());
+        }
+    }
+
+    // Method untuk suara langkah (dipanggil berulang)
+    private void playStepSound() {
+        try {
+            File soundFile = new File(STEP_SFX_PATH);
+            if (soundFile.exists()) {
+                AudioInputStream audioIn = AudioSystem.getAudioInputStream(soundFile);
+                Clip clip = AudioSystem.getClip();
+                clip.open(audioIn);
+                clip.start(); // Mainkan sekali (tidak loop)
+            }
+        } catch (Exception e) {
+            // Ignore error agar tidak spam console
         }
     }
 
@@ -111,7 +137,7 @@ public class Main extends JFrame {
     }
 
     private void initializeUI() {
-        setTitle("🎲 LADDER GAMES: Score Edition");
+        setTitle("🎲 LADDER GAMES: Ultimate Edition");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout(0, 0));
         getContentPane().setBackground(COLOR_BG_DARK);
@@ -130,8 +156,6 @@ public class Main extends JFrame {
         setExtendedState(JFrame.MAXIMIZED_BOTH);
         pack();
         setLocationRelativeTo(null);
-
-        playMusic(SOUND_PATH);
     }
 
     private JPanel createTopPanel() {
@@ -195,17 +219,16 @@ public class Main extends JFrame {
         diceBox.setLayout(new BoxLayout(diceBox, BoxLayout.Y_AXIS));
         diceBox.setOpaque(false);
 
-        diceResultLabel = new JLabel("?");
-        diceResultLabel.setFont(new Font("Segoe UI", Font.BOLD, 80));
-        diceResultLabel.setForeground(Color.WHITE);
-        diceResultLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
+        diceVisualPanel = new DicePanel();
+        diceVisualPanel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
         diceStatusLabel = new JLabel(" ");
         diceStatusLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
         diceStatusLabel.setForeground(Color.WHITE);
         diceStatusLabel.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        diceBox.add(diceResultLabel);
+        diceBox.add(diceVisualPanel);
+        diceBox.add(Box.createVerticalStrut(10));
         diceBox.add(diceStatusLabel);
 
         scoreboardPanel = new JPanel();
@@ -234,6 +257,58 @@ public class Main extends JFrame {
         return panel;
     }
 
+    private class DicePanel extends JPanel {
+        private int value = 1;
+
+        public DicePanel() {
+            setPreferredSize(new Dimension(100, 100));
+            setMaximumSize(new Dimension(100, 100));
+            setOpaque(false);
+        }
+
+        public void setValue(int value) {
+            this.value = value;
+            repaint();
+        }
+
+        @Override
+        protected void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            Graphics2D g2d = (Graphics2D) g;
+            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            g2d.setColor(Color.WHITE);
+            g2d.fillRoundRect(5, 5, 90, 90, 20, 20);
+            g2d.setColor(new Color(200, 200, 200));
+            g2d.setStroke(new BasicStroke(3));
+            g2d.drawRoundRect(5, 5, 90, 90, 20, 20);
+
+            g2d.setColor(Color.BLACK);
+            int dotSize = 18;
+            int center = 50 - dotSize/2;
+            int left = 25 - dotSize/2;
+            int right = 75 - dotSize/2;
+            int top = 25 - dotSize/2;
+            int bottom = 75 - dotSize/2;
+
+            if (value == 1 || value == 3 || value == 5) {
+                g2d.fillOval(center, center, dotSize, dotSize);
+            }
+            if (value >= 2) {
+                g2d.fillOval(left, top, dotSize, dotSize);
+                g2d.fillOval(right, bottom, dotSize, dotSize);
+            }
+            if (value >= 4) {
+                g2d.fillOval(right, top, dotSize, dotSize);
+                g2d.fillOval(left, bottom, dotSize, dotSize);
+            }
+            if (value == 6) {
+                g2d.fillOval(left, center, dotSize, dotSize);
+                g2d.fillOval(right, center, dotSize, dotSize);
+            }
+        }
+    }
+
     private JButton createStyledButton(String text, Color bg) {
         JButton btn = new JButton(text) {
             @Override
@@ -257,68 +332,43 @@ public class Main extends JFrame {
 
     private void updateScoreboard() {
         scoreboardPanel.removeAll();
-
-        // Refresh Queue agar urutan ranking terupdate sesuai logika compareTo baru
         leaderboardQueue.clear();
         leaderboardQueue.addAll(players);
 
         List<Player> tempSorted = new ArrayList<>();
-        while(!leaderboardQueue.isEmpty()) {
-            tempSorted.add(leaderboardQueue.poll());
-        }
-        // Kembalikan ke queue (opsional jika queue dipakai logika lain)
+        while(!leaderboardQueue.isEmpty()) tempSorted.add(leaderboardQueue.poll());
         leaderboardQueue.addAll(tempSorted);
 
         int rank = 1;
         for (Player p : tempSorted) {
             JPanel row = new JPanel(new GridLayout(1, 2));
             row.setOpaque(false);
-            row.setMaximumSize(new Dimension(340, 60)); // Sedikit diperbesar
+            row.setMaximumSize(new Dimension(340, 50));
             row.setBorder(new EmptyBorder(5,5,5,5));
 
-            // --- KIRI: Rank, Nama, Wins ---
-            JPanel leftInfo = new JPanel(new GridLayout(3, 1)); // Jadi 3 baris
+            JPanel leftInfo = new JPanel(new GridLayout(2, 1));
             leftInfo.setOpaque(false);
-
             JLabel nameLbl = new JLabel("#" + rank + " " + p.getName());
             nameLbl.setForeground(Color.WHITE);
             nameLbl.setFont(new Font("Segoe UI", Font.BOLD, 14));
+            JLabel winsLbl = new JLabel("Total Wins: " + p.getTotalWins());
+            winsLbl.setForeground(Color.GRAY);
+            winsLbl.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+            leftInfo.add(nameLbl); leftInfo.add(winsLbl);
 
-            // Tampilkan TOTAL WINS dengan jelas
-            JLabel winsLbl = new JLabel("🏆 Wins: " + p.getTotalWins());
-            winsLbl.setForeground(Color.YELLOW); // Warna kuning biar menonjol
-            winsLbl.setFont(new Font("Segoe UI", Font.BOLD, 11));
-
-            JLabel posLbl = new JLabel("Node: " + p.getPosition());
-            posLbl.setForeground(Color.GRAY);
-            posLbl.setFont(new Font("Segoe UI", Font.PLAIN, 10));
-
-            leftInfo.add(nameLbl);
-            leftInfo.add(winsLbl);
-            leftInfo.add(posLbl);
-
-            // --- KANAN: Total Score & Session Score ---
             JPanel rightInfo = new JPanel(new GridLayout(2, 1));
             rightInfo.setOpaque(false);
+            JLabel nodeLbl = new JLabel("Node: " + p.getPosition());
+            nodeLbl.setForeground(COLOR_GREEN);
+            nodeLbl.setFont(new Font("Segoe UI", Font.BOLD, 14));
+            nodeLbl.setHorizontalAlignment(SwingConstants.RIGHT);
+            JLabel scoreLbl = new JLabel("Score: " + p.getCurrentScore());
+            scoreLbl.setForeground(COLOR_ACCENT_ORANGE);
+            scoreLbl.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            scoreLbl.setHorizontalAlignment(SwingConstants.RIGHT);
+            rightInfo.add(nodeLbl); rightInfo.add(scoreLbl);
 
-            // Tampilkan TOTAL SCORE (Akumulasi Sejarah)
-            JLabel totalScoreLbl = new JLabel("Total Score: " + p.getTotalAccumulatedScore());
-            totalScoreLbl.setForeground(COLOR_ACCENT_ORANGE);
-            totalScoreLbl.setFont(new Font("Segoe UI", Font.BOLD, 13));
-            totalScoreLbl.setHorizontalAlignment(SwingConstants.RIGHT);
-
-            // Tampilkan Score Sesi Ini (Kecil saja)
-            JLabel sessionScoreLbl = new JLabel("(This Game: " + p.getCurrentSessionScore() + ")");
-            sessionScoreLbl.setForeground(new Color(150, 150, 150));
-            sessionScoreLbl.setFont(new Font("Segoe UI", Font.ITALIC, 10));
-            sessionScoreLbl.setHorizontalAlignment(SwingConstants.RIGHT);
-
-            rightInfo.add(totalScoreLbl);
-            rightInfo.add(sessionScoreLbl);
-
-            row.add(leftInfo);
-            row.add(rightInfo);
-
+            row.add(leftInfo); row.add(rightInfo);
             scoreboardPanel.add(row);
             scoreboardPanel.add(new JSeparator());
             rank++;
@@ -345,12 +395,8 @@ public class Main extends JFrame {
                 if (name == null || name.trim().isEmpty()) name = "Player " + (i+1);
                 else name = name.trim();
 
-                // CEK APAKAH PEMAIN INI SUDAH PERNAH MAIN SEBELUMNYA
-                if (!globalRecords.containsKey(name)) {
-                    globalRecords.put(name, new PlayerRecord());
-                }
-                PlayerRecord record = globalRecords.get(name); // AMBIL REKOR LAMA (TOTAL WINS)
-
+                if (!globalRecords.containsKey(name)) globalRecords.put(name, new PlayerRecord());
+                PlayerRecord record = globalRecords.get(name);
                 players.add(new Player(name, colors[i], record));
             }
 
@@ -368,7 +414,7 @@ public class Main extends JFrame {
             currentPlayerLabel.setText(currentPlayer.getName());
             currentPlayerLabel.setForeground(currentPlayer.getColor());
 
-            diceResultLabel.setText("?");
+            diceVisualPanel.setValue(1);
             diceStatusLabel.setText("");
 
             gameBoard.setPlayers(players);
@@ -380,53 +426,44 @@ public class Main extends JFrame {
         }
     }
 
-    // --- [BARU] METHOD UNTUK RESET GAME TAPI PERTAHANKAN ORANGNYA ---
-    private void resetGameSamePlayers() {
-        for (Player p : players) {
-            p.setPosition(1);       // Reset posisi ke 1
-            p.setCurrentScore(0);   // Reset score sesi ke 0 (Total Wins tetap aman di Record)
-        }
-
-        // Generate ulang papan agar tidak bosan
-        generateLadders();
-        generateScoreNodes();
-
-        // Reset antrian
-        playerQueue.clear();
-        playerQueue.addAll(players);
-
-        currentPlayer = playerQueue.poll();
-        currentPlayerLabel.setText(currentPlayer.getName());
-        currentPlayerLabel.setForeground(currentPlayer.getColor());
-
-        diceResultLabel.setText("?");
-        diceStatusLabel.setText("New Round!");
-
-        gameBoard.setLadders(ladders);
-        gameBoard.setStarNodes(scoreNodes);
-        gameBoard.repaint();
-        updateScoreboard();
-
-        gameStarted = true;
-        playButton.setEnabled(false);
-        rollDiceButton.setEnabled(true);
-    }
-
+    // --- LOGIKA UTAMA: ROLL DICE DENGAN ANIMASI ---
     private void rollDice() {
         if (!gameStarted || isAnimating) return;
         rollDiceButton.setEnabled(false);
         isAnimating = true;
 
+        diceStatusLabel.setText("Rolling...");
+        diceStatusLabel.setForeground(Color.WHITE);
+
+        // Timer Animasi Dadu (Berputar Acak)
+        // Interval 80ms (Cepat)
+        Timer diceAnimTimer = new Timer(80, null);
+        long startTime = System.currentTimeMillis();
+
+        diceAnimTimer.addActionListener(e -> {
+            // Tampilkan angka acak
+            diceVisualPanel.setValue(random.nextInt(6) + 1);
+
+            // Hentikan animasi setelah 1 detik (1000ms)
+            if (System.currentTimeMillis() - startTime > 1000) {
+                diceAnimTimer.stop();
+                finalizeDiceRoll(); // Lanjut ke logika pergerakan
+            }
+        });
+        diceAnimTimer.start();
+    }
+
+    // Method setelah dadu berhenti berputar
+    private void finalizeDiceRoll() {
         int diceVal = random.nextInt(6) + 1;
         boolean isBackward = random.nextDouble() < 0.20;
 
-        diceResultLabel.setText(String.valueOf(diceVal));
+        diceVisualPanel.setValue(diceVal);
+
         if (isBackward) {
-            diceResultLabel.setForeground(COLOR_RED);
             diceStatusLabel.setText("BACKWARD! 🔻");
             diceStatusLabel.setForeground(COLOR_RED);
         } else {
-            diceResultLabel.setForeground(COLOR_GREEN);
             diceStatusLabel.setText("FORWARD! 🔼");
             diceStatusLabel.setForeground(COLOR_GREEN);
         }
@@ -478,6 +515,9 @@ public class Main extends JFrame {
                 int nextNode = path.get(index[0]);
                 int prevNode = currentPlayer.getPosition();
 
+                // --- MAINKAN SUARA LANGKAH DI SINI ---
+                playStepSound();
+
                 if (Math.abs(nextNode - prevNode) > 1) {
                     Ladder l = getLadderAt(prevNode);
                     if (l != null) gameBoard.setHighlightLadder(l);
@@ -504,50 +544,29 @@ public class Main extends JFrame {
         timer.start();
     }
 
-    // --- LOGIKA GAME SELESAI & PLAY AGAIN ---
     private void finishTurn() {
         int pos = currentPlayer.getPosition();
 
         if (pos == 64) {
-            // 1. Tambah Win
             currentPlayer.addWin();
-
-            // 2. Penting: Pastikan Map Global terupdate
-            // (Sebenarnya sudah otomatis karena Player merujuk ke object PlayerRecord yang sama,
-            // tapi ini untuk memastikan konsistensi UI)
-
-            updateScoreboard(); // Update UI Leaderboard langsung saat menang
-
-            // 3. Mainkan Musik Menang (Opsional)
-            // playMusic("win.wav");
-
-            int response = JOptionPane.showConfirmDialog(this,
-                    "🎉 CONGRATULATIONS! 🎉\n" +
-                            currentPlayer.getName() + " WINS THE ROUND!\n\n" +
-                            "🏆 Total Wins: " + currentPlayer.getTotalWins() + "\n" +
-                            "⭐ Total Accumulated Score: " + currentPlayer.getTotalAccumulatedScore() + "\n\n" +
-                            "Do you want to play again with the same players?",
-                    "Round Over",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.INFORMATION_MESSAGE);
-
-            if (response == JOptionPane.YES_OPTION) {
-                resetGameSamePlayers();
-            } else {
-                gameStarted = false;
-                playButton.setEnabled(true);
-                rollDiceButton.setEnabled(false);
-                diceResultLabel.setText("?");
-                diceStatusLabel.setText("Finished");
-            }
-
+            JOptionPane.showMessageDialog(this, "🎉 " + currentPlayer.getName() + " WINS! 🎉\nFinal Score: " + currentPlayer.getCurrentScore());
+            gameStarted = false;
+            playButton.setEnabled(true);
             isAnimating = false;
+            updateScoreboard();
             return;
         }
 
-        // ... (Kode sisa Bonus Roll dan ganti giliran tidak berubah)
         if (pos % 5 == 0 && pos != 64) {
-            // ...
+            int choice = JOptionPane.showConfirmDialog(this,
+                    "🎲 BONUS ROLL! You landed on " + pos + ".\nRoll again?",
+                    "Bonus", JOptionPane.YES_NO_OPTION);
+
+            if (choice == JOptionPane.YES_OPTION) {
+                isAnimating = false;
+                rollDiceButton.setEnabled(true);
+                return;
+            }
         }
 
         playerQueue.add(currentPlayer);
