@@ -11,11 +11,14 @@ import javax.swing.Timer;
 public class Main extends JFrame {
 
     // --- CONFIG AUDIO ---
-    // BGM: Musik Gamenya
+    // 1. Musik Latar (Looping)
     private static final String BGM_PATH = "Ular Tangga - Modern Stage - Mohamad Rifandi Lihawa - SoundLoadMate.com.wav";
 
-    // SFX: Efek Suara LANGKAH
+    // 2. Efek Suara LANGKAH (Pendek: 'click' / 'tap')
     private static final String STEP_SFX_PATH = "Jalan.wav";
+
+    // 3. Efek Suara ROLL DICE
+    private static final String ROLL_SFX_PATH = "roll-dice.wav";
 
     // --- DATA STORE ---
     private static Map<String, PlayerRecord> globalRecords = new HashMap<>();
@@ -43,7 +46,6 @@ public class Main extends JFrame {
 
     // Audio Clips
     private Clip backgroundMusic;
-    // Kita tidak simpan Clip step secara global agar bisa diputar tumpang tindih dengan cepat
 
     // Warna UI
     private final Color COLOR_BG_DARK = new Color(30, 40, 50);
@@ -77,7 +79,7 @@ public class Main extends JFrame {
                 backgroundMusic = AudioSystem.getClip();
                 backgroundMusic.open(audioIn);
                 FloatControl gainControl = (FloatControl) backgroundMusic.getControl(FloatControl.Type.MASTER_GAIN);
-                gainControl.setValue(-10.0f); // Volume BGM dikecilkan
+                gainControl.setValue(-10.0f);
                 backgroundMusic.loop(Clip.LOOP_CONTINUOUSLY);
                 backgroundMusic.start();
             }
@@ -86,7 +88,7 @@ public class Main extends JFrame {
         }
     }
 
-    // Method untuk suara langkah (dipanggil berulang)
+    // Suara Langkah (Pendek)
     private void playStepSound() {
         try {
             File soundFile = new File(STEP_SFX_PATH);
@@ -94,10 +96,25 @@ public class Main extends JFrame {
                 AudioInputStream audioIn = AudioSystem.getAudioInputStream(soundFile);
                 Clip clip = AudioSystem.getClip();
                 clip.open(audioIn);
-                clip.start(); // Mainkan sekali (tidak loop)
+                clip.start();
+            }
+        } catch (Exception e) {}
+    }
+
+    // Suara Roll Dadu (4 Detik)
+    private void playRollSound() {
+        try {
+            File soundFile = new File(ROLL_SFX_PATH);
+            if (soundFile.exists()) {
+                AudioInputStream audioIn = AudioSystem.getAudioInputStream(soundFile);
+                Clip clip = AudioSystem.getClip();
+                clip.open(audioIn);
+                clip.start();
+            } else {
+                System.out.println("Roll SFX file not found at: " + ROLL_SFX_PATH);
             }
         } catch (Exception e) {
-            // Ignore error agar tidak spam console
+            System.out.println("Error playing Roll SFX: " + e.getMessage());
         }
     }
 
@@ -426,38 +443,42 @@ public class Main extends JFrame {
         }
     }
 
-    // --- LOGIKA UTAMA: ROLL DICE DENGAN ANIMASI ---
+    // --- LOGIKA UTAMA: ROLL DICE 4 DETIK & AUDIO ---
     private void rollDice() {
         if (!gameStarted || isAnimating) return;
         rollDiceButton.setEnabled(false);
         isAnimating = true;
 
+        // 1. Mainkan suara dadu (durasi 4 detik)
+        playRollSound();
+
         diceStatusLabel.setText("Rolling...");
         diceStatusLabel.setForeground(Color.WHITE);
 
-        // Timer Animasi Dadu (Berputar Acak)
-        // Interval 80ms (Cepat)
+        // 2. Timer Animasi Dadu Berputar
+        // Interval 80ms (sangat cepat mengacak visual dadu)
         Timer diceAnimTimer = new Timer(80, null);
         long startTime = System.currentTimeMillis();
 
         diceAnimTimer.addActionListener(e -> {
-            // Tampilkan angka acak
+            // Tampilkan angka acak selama animasi
             diceVisualPanel.setValue(random.nextInt(6) + 1);
 
-            // Hentikan animasi setelah 1 detik (1000ms)
-            if (System.currentTimeMillis() - startTime > 1000) {
+            // 3. Stop setelah 4 Detik (4000 ms) sesuai durasi lagu
+            if (System.currentTimeMillis() - startTime > 4000) {
                 diceAnimTimer.stop();
-                finalizeDiceRoll(); // Lanjut ke logika pergerakan
+                finalizeDiceRoll(); // Lanjut ke logika
             }
         });
         diceAnimTimer.start();
     }
 
-    // Method setelah dadu berhenti berputar
+    // Method dipanggil setelah 4 detik (setelah lagu selesai)
     private void finalizeDiceRoll() {
         int diceVal = random.nextInt(6) + 1;
         boolean isBackward = random.nextDouble() < 0.20;
 
+        // Tampilkan hasil akhir
         diceVisualPanel.setValue(diceVal);
 
         if (isBackward) {
@@ -515,7 +536,7 @@ public class Main extends JFrame {
                 int nextNode = path.get(index[0]);
                 int prevNode = currentPlayer.getPosition();
 
-                // --- MAINKAN SUARA LANGKAH DI SINI ---
+                // --- MAINKAN SUARA LANGKAH DI SETIAP PERPINDAHAN ---
                 playStepSound();
 
                 if (Math.abs(nextNode - prevNode) > 1) {
